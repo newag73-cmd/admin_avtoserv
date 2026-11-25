@@ -12,8 +12,10 @@ prisma/*.db
 *.db
 .next
 .next-verification
+.next-neon-check
 src/generated/
 .npm-cache
 node_modules
 coverage
 tsconfig.tsbuildinfo
+.neon

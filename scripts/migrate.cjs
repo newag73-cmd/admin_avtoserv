@@ -3,12 +3,13 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const optional = process.argv.includes("--optional");
-if (typeof process.loadEnvFile === "function") {
+if (!process.env.DATABASE_URL && typeof process.loadEnvFile === "function") {
   try { process.loadEnvFile(path.join(root, ".env")); } catch {}
 }
 
-if (process.env.LAYERO_DATABASE_URL) process.env.DATABASE_URL = process.env.LAYERO_DATABASE_URL;
+if (!process.env.DATABASE_URL && process.env.LAYERO_DATABASE_URL) process.env.DATABASE_URL = process.env.LAYERO_DATABASE_URL;
 const url = process.env.DATABASE_URL || "";
+if (!process.env.DATABASE_URL_UNPOOLED) process.env.DATABASE_URL_UNPOOLED = url;
 let schema;
 if (url.startsWith("file:")) schema = "prisma/schema.prisma";
 else if (url.startsWith("postgres://") || url.startsWith("postgresql://")) schema = "prisma/layero/schema.prisma";

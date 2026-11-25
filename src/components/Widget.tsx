@@ -14,6 +14,7 @@ export default function Widget({ embedded = false }: { embedded?: boolean }) {
   const [open,setOpen]=useState(embedded),[input,setInput]=useState(""),[busy,setBusy]=useState(false),[error,setError]=useState(""),[session,setSession]=useState(""),[messages,setMessages]=useState<Msg[]>([]);
   const [bookingOpen,setBookingOpen]=useState(false),[serviceId,setServiceId]=useState(""),[date,setDate]=useState(""),[slots,setSlots]=useState<Slot[]>([]),[slotsLoading,setSlotsLoading]=useState(false),[slot,setSlot]=useState(""),[clientName,setClientName]=useState(""),[clientPhone,setClientPhone]=useState(""),[clientEmail,setClientEmail]=useState(""),[bookingMessage,setBookingMessage]=useState("");
   const [bookingConfirmation,setBookingConfirmation]=useState<{id:string;text:string}|null>(null);
+  const [slotsError,setSlotsError]=useState(false),[slotsRetry,setSlotsRetry]=useState(0);
   const [serviceMenuOpen,setServiceMenuOpen]=useState(false);
   const [lookupOpen,setLookupOpen]=useState(false),[lookupPhone,setLookupPhone]=useState(""),[lookupId,setLookupId]=useState(""),[lookupMessage,setLookupMessage]=useState("");
   const end=useRef<HTMLDivElement>(null),field=useRef<HTMLTextAreaElement>(null),bookingField=useRef<HTMLButtonElement>(null),lookupField=useRef<HTMLInputElement>(null);
@@ -27,9 +28,32 @@ export default function Widget({ embedded = false }: { embedded?: boolean }) {
   useEffect(()=>{if(!open)return;if(bookingOpen)bookingField.current?.focus();else if(lookupOpen)lookupField.current?.focus();else field.current?.focus();},[open,bookingOpen,lookupOpen]);
   function close(){if(embedded&&window.parent!==window)window.parent.postMessage({type:"ai-business-widget-close"},"*");else setOpen(false);}
   useEffect(()=>{const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape")close();};window.addEventListener("keydown",onKey);return()=>window.removeEventListener("keydown",onKey);},[embedded]);
-  useEffect(()=>{if(!bookingOpen||!serviceId||!date)return;const controller=new AbortController();setSlot("");setSlots([]);setSlotsLoading(true);fetch(`/api/booking?service_id=${encodeURIComponent(serviceId)}&date=${date}`,{signal:controller.signal}).then(r=>r.json()).then(d=>{if(!controller.signal.aborted)setSlots(d.slots??[]);}).catch(()=>{if(!controller.signal.aborted)setSlots([]);}).finally(()=>{if(!controller.signal.aborted)setSlotsLoading(false);});return()=>controller.abort();},[bookingOpen,serviceId,date]);
+  useEffect(()=>{
+    if(!bookingOpen||!serviceId||!date)return;
+    const controller=new AbortController();
+    setSlot("");setSlots([]);setSlotsError(false);setSlotsLoading(true);
+    async function loadSlots(){
+      for(let attempt=0;attempt<2;attempt++){
+        try{
+          const response=await fetch(`/api/booking?service_id=${encodeURIComponent(serviceId)}&date=${encodeURIComponent(date)}`,{signal:controller.signal,cache:"no-store"});
+          if(!response.ok)throw new Error(`Slots request failed: ${response.status}`);
+          const data=await response.json();
+          if(!Array.isArray(data.slots))throw new Error("Invalid slots response");
+          if(!controller.signal.aborted){setSlots(data.slots);setSlotsError(false);}
+          break;
+        }catch{
+          if(controller.signal.aborted)break;
+          if(attempt===0){await new Promise(resolve=>setTimeout(resolve,800));continue;}
+          setSlotsError(true);
+        }
+      }
+      if(!controller.signal.aborted)setSlotsLoading(false);
+    }
+    void loadSlots();
+    return()=>controller.abort();
+  },[bookingOpen,serviceId,date,slotsRetry]);
   async function send(text=input){if(!text.trim()||busy||!session)return;setInput("");setError("");if(/запиши|запишите|записаться|записать|запись на|заброн|брон/i.test(text)){setBookingOpen(true);setLookupOpen(false);if(/завтра/i.test(text))setDate(businessDate(timezone,1));else if(/сегодня/i.test(text))setDate(businessDate(timezone,0));const words=text.toLocaleLowerCase().match(/\p{L}{5,}/gu)??[];const ranked=services.map(s=>({service:s,score:words.filter(w=>(s.name.toLocaleLowerCase().match(/\p{L}{5,}/gu)??[]).some(sw=>sw.slice(0,5)===w.slice(0,5))).length})).sort((a,b)=>b.score-a.score);if(ranked[0]?.score)setServiceId(ranked[0].service.id);}setMessages(prev=>[...prev,{role:"user",content:text},{role:"assistant",content:""}]);setBusy(true);let answer="";
-    try{const res=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({sessionId:session,message:text})});if(!res.ok){const d=await res.json();throw new Error([d.error,d.contact_message].filter(Boolean).join(" ")||"Не удалось отправить сообщение");}const reader=res.body?.getReader();if(!reader)throw new Error("Пустой ответ сервера");while(true){const {done,value}=await reader.read();if(done)break;answer+=new TextDecoder().decode(value);setMessages(prev=>{const next=[...prev];next[next.length-1]={role:"assistant",content:answer};return next;});}}
+    try{const res=await fetch("/api/chat",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({sessionId:session,message:text})});if(!res.ok){const d=await res.json();throw new Error([d.error,d.contact_message].filter(Boolean).join(" ")||"Не удалось отправить сообщение");}if(res.headers.get("content-type")?.includes("application/json")){const d=await res.json();answer=typeof d.answer==="string"?d.answer:typeof d.error==="string"?d.error:"";if(!answer)throw new Error("Пустой ответ сервера");setMessages(prev=>{const next=[...prev];next[next.length-1]={role:"assistant",content:answer};return next;});return;}const reader=res.body?.getReader();if(!reader)throw new Error("Пустой ответ сервера");while(true){const {done,value}=await reader.read();if(done)break;answer+=new TextDecoder().decode(value);setMessages(prev=>{const next=[...prev];next[next.length-1]={role:"assistant",content:answer};return next;});}}
     catch(e){setError(e instanceof Error?e.message:t.networkError);setMessages(prev=>prev.slice(0,-1));}finally{setBusy(false);}
   }
   async function submitBooking(e:FormEvent){e.preventDefault();setBookingMessage("");if(clientPhone.replace(/\D/g,"").length<7){setBookingMessage("Укажите телефон с кодом города или страны.");return;}try{const res=await fetch("/api/booking",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({service_id:serviceId,slot,client_name:clientName,client_phone:clientPhone,client_email:clientEmail||null,session_id:session})});const data=await res.json();if(!res.ok){setBookingMessage(res.status===409?"Это время уже занято. Выберите другое свободное время.":data.error??"Не удалось создать запись");if(res.status===409){const latest=await fetch(`/api/booking?service_id=${encodeURIComponent(serviceId)}&date=${date}`).then(r=>r.json());setSlots(latest.slots??[]);setSlot("");}return;}setBookingConfirmation({id:data.booking.id,text:data.confirmation_text});setBookingOpen(false);setClientName("");setClientPhone("");setClientEmail("");setSlot("");}catch{setBookingMessage("Ошибка сети. Повторите создание записи.");}}
@@ -55,7 +79,7 @@ export default function Widget({ embedded = false }: { embedded?: boolean }) {
             {serviceMenuOpen&&<div id="widget-service-options" className="widget-service-options">{services.map(s=><button key={s.id} type="button" aria-pressed={serviceId===s.id} onClick={()=>{if(serviceId!==s.id){setServiceId(s.id);setSlot("");}setBookingMessage("");setServiceMenuOpen(false);bookingField.current?.focus();}}><span>{s.name}</span>{s.price!==null&&<b>{s.price} {config.currency==="RUB"?"₽":config.currency??""}</b>}</button>)}</div>}
           </fieldset>
           <input aria-label={t.date} type="date" min={businessDate(timezone,0)} value={date} onChange={e=>setDate(e.target.value)}/><select aria-label={t.time} required value={slot} onChange={e=>setSlot(e.target.value)}><option value="">{t.chooseTime}</option>{slots.slice(0,3).map(s=><option key={s.start} value={s.start}>{new Intl.DateTimeFormat(locale,{timeZone:timezone,dateStyle:"short",timeStyle:"short"}).format(new Date(s.start))}</option>)}</select>
-          {slotsLoading?<small>Проверяем свободное время…</small>:!slots.length&&<small role="status">{date===businessDate(timezone,0)?"На сегодня запись уже недоступна или свободного времени нет. Выберите другой день.":t.noSlots}</small>}<input aria-label={t.name} placeholder={t.name} maxLength={100} required value={clientName} onChange={e=>setClientName(e.target.value)}/><input aria-label={t.phone} type="tel" placeholder={t.phone} maxLength={20} required value={clientPhone} onChange={e=>setClientPhone(e.target.value)}/><input aria-label={t.email} type="email" placeholder={t.email} maxLength={254} value={clientEmail} onChange={e=>setClientEmail(e.target.value)}/>
+          {slotsLoading?<small>Проверяем свободное время…</small>:slotsError?<small role="alert">Не удалось загрузить свободное время. <button type="button" onClick={()=>setSlotsRetry(v=>v+1)}>Повторить</button></small>:!slots.length&&<small role="status">{date===businessDate(timezone,0)?"На сегодня запись уже недоступна или свободного времени нет. Выберите другой день.":t.noSlots}</small>}<input aria-label={t.name} placeholder={t.name} maxLength={100} required value={clientName} onChange={e=>setClientName(e.target.value)}/><input aria-label={t.phone} type="tel" placeholder={t.phone} maxLength={20} required value={clientPhone} onChange={e=>setClientPhone(e.target.value)}/><input aria-label={t.email} type="email" placeholder={t.email} maxLength={254} value={clientEmail} onChange={e=>setClientEmail(e.target.value)}/>
           {bookingMessage&&<p className="error" role="alert">{bookingMessage}</p>}<button className="primary" disabled={!slot}>{t.createBooking}</button>
         </form>}
         {!bookingOpen&&!lookupOpen&&<form onSubmit={e=>{e.preventDefault();send();}}><textarea ref={field} aria-label={t.message} rows={2} maxLength={1000} value={input} onChange={e=>setInput(e.target.value)} placeholder={`${t.message}…`}/><div className="row" style={{justifyContent:"space-between",marginTop:6}}><small>{t.counter(input.length)}</small><button className="primary" disabled={busy}>{t.send}</button></div></form>}

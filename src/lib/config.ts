@@ -24,16 +24,26 @@ export const businessSchema = z.object({
 });
 export type BusinessConfig = z.infer<typeof businessSchema>;
 const dataPath = (file: string) => process.env.DATA_DIR ? path.join(process.env.DATA_DIR, file) : path.join(process.cwd(), "data", file);
+async function readDataFile(file: string): Promise<string> {
+  const candidates = [...new Set([dataPath(file), path.join(process.cwd(), "data", file)])];
+  let lastError: unknown;
+  for (const candidate of candidates) {
+    try { return await readFile(candidate, "utf8"); }
+    catch (error) { lastError = error; }
+  }
+  throw lastError;
+}
 const settingKeys = { business: "business-config", prompt: "system-prompt" } as const;
 async function readStoredSetting(key: string, file: string): Promise<string | null> {
   if (!databaseConfigured) return null;
   try {
     const existing = await db.appSetting.findUnique({ where: { key } });
     if (existing) return existing.value;
-    const value = await readFile(dataPath(file), "utf8");
+    const value = await readDataFile(file);
     return (await db.appSetting.upsert({ where: { key }, create: { key, value }, update: {} })).value;
   } catch (error) {
-    console.error("persistent_business_setting_read_failed", key, error instanceof Error ? error.name : "unknown");
+    const failure = error instanceof Error ? error as Error & { code?: string; errorCode?: string } : null;
+    console.error("persistent_business_setting_read_failed", key, failure ? { name: failure.name, code: failure.errorCode ?? failure.code ?? null } : "unknown");
     return null;
   }
 }
@@ -51,13 +61,13 @@ async function writeStoredSetting(key: string, value: string, file: string): Pro
   await rename(temp, target);
 }
 export async function getBusinessConfig(): Promise<BusinessConfig> {
-  const raw = await readStoredSetting(settingKeys.business, "business.json") ?? await readFile(dataPath("business.json"), "utf8");
+  const raw = await readStoredSetting(settingKeys.business, "business.json") ?? await readDataFile("business.json");
   return businessSchema.parse(JSON.parse(raw));
 }
 export async function getSystemPrompt(): Promise<string> {
-  return await readStoredSetting(settingKeys.prompt, "system-prompt.txt") ?? await readFile(dataPath("system-prompt.txt"), "utf8");
+  return await readStoredSetting(settingKeys.prompt, "system-prompt.txt") ?? await readDataFile("system-prompt.txt");
 }
-export async function getDefaultSystemPrompt(): Promise<string> { return readFile(dataPath("system-prompt.default.txt"), "utf8"); }
+export async function getDefaultSystemPrompt(): Promise<string> { return readDataFile("system-prompt.default.txt"); }
 export async function saveBusinessConfig(input: unknown): Promise<BusinessConfig> {
   const parsed = businessSchema.parse(input);
   await writeStoredSetting(settingKeys.business, `${JSON.stringify(parsed, null, 2)}\n`, "business.json");

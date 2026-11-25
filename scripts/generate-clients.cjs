@@ -4,8 +4,8 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const prismaCli = path.join(root, "node_modules/prisma/build/index.js");
 
-function generate(schema, url) {
-  const env = { ...process.env, DATABASE_URL: url };
+function generate(schema, url, directUrl = url) {
+  const env = { ...process.env, DATABASE_URL: url, DATABASE_URL_UNPOOLED: directUrl };
   const result = spawnSync(process.execPath, [prismaCli, "generate", "--schema", schema], {
     cwd: root,
     env,
@@ -17,7 +17,5 @@ function generate(schema, url) {
 }
 
 generate("prisma/schema.prisma", "file:./dev.db");
-generate(
-  "prisma/layero/schema.prisma",
-  process.env.LAYERO_DATABASE_URL || "postgresql://build:build@127.0.0.1:5432/build?schema=public",
-);
+const layeroUrl = process.env.LAYERO_DATABASE_URL || "postgresql://build:build@127.0.0.1:5432/build?schema=public";
+generate("prisma/layero/schema.prisma", layeroUrl, process.env.DATABASE_URL_UNPOOLED || layeroUrl);

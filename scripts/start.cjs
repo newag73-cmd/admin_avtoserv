@@ -3,10 +3,10 @@ const { copyFileSync, existsSync, mkdirSync } = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
-if (typeof process.loadEnvFile === "function") {
+if (!process.env.DATABASE_URL && typeof process.loadEnvFile === "function") {
   try { process.loadEnvFile(path.join(root, ".env")); } catch {}
 }
-if (process.env.LAYERO_DATABASE_URL) process.env.DATABASE_URL = process.env.LAYERO_DATABASE_URL;
+if (!process.env.DATABASE_URL && process.env.LAYERO_DATABASE_URL) process.env.DATABASE_URL = process.env.LAYERO_DATABASE_URL;
 
 if (process.env.DATA_DIR) {
   mkdirSync(process.env.DATA_DIR, { recursive: true });
