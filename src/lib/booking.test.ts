@@ -1,0 +1,15 @@
+import {afterAll,describe,expect,it,vi} from "vitest";
+import {availableSlots,createBooking} from "./booking";
+import {db} from "./db";
+import {NextRequest} from "next/server";
+import {GET as getBookingSlots} from "@/app/api/booking/route";
+const localDate=(d:Date)=>{const p=new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Moscow",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(d);return `${p.find(x=>x.type==="year")?.value}-${p.find(x=>x.type==="month")?.value}-${p.find(x=>x.type==="day")?.value}`;};
+async function nextSlot(service:string){for(let offset=1;offset<10;offset++){const d=new Date(Date.now()+offset*86400000),date=localDate(d),slots=await availableSlots(service,date,date);if(slots.length)return slots[0];}throw new Error("No test slot available");}
+const cleanup:string[]=[];
+afterAll(async()=>{if(cleanup.length)await db.booking.deleteMany({where:{id:{in:cleanup}}});});
+describe("booking persistence",()=>{
+  it("is idempotent for the same phone and slot",async()=>{const slot=await nextSlot("wheel_balance"),input={service_id:"wheel_balance",slot:slot.start.toISOString(),client_name:"Test Client",client_phone:"+79990001122",session_id:`test-${Date.now()}`};const first=await createBooking(input);cleanup.push(first.booking.id);const second=await createBooking(input);expect(second.duplicate).toBe(true);expect(second.booking.id).toBe(first.booking.id);});
+  it("allows only one concurrent booking for a unique service slot",async()=>{const slot=await nextSlot("ac_service"),base={service_id:"ac_service",slot:slot.start.toISOString(),client_phone:"+79990002233"};const results=await Promise.allSettled([createBooking({...base,client_name:"Client A"}),createBooking({...base,client_name:"Client B"})]);const successes=results.filter(x=>x.status==="fulfilled");expect(successes).toHaveLength(1);if(successes[0].status==="fulfilled")cleanup.push(successes[0].value.booking.id);});
+  it("rejects a lunch slot even if it is submitted directly",async()=>{await expect(createBooking({service_id:"wheel_balance",slot:"2026-11-09T10:00:00.000Z",client_name:"Client",client_phone:"+79990003344"})).rejects.toThrow();});
+  it("does not offer tomorrow when today is selected after closing",async()=>{const clock=vi.spyOn(Date,"now").mockReturnValue(new Date("2026-11-05T17:10:00.000Z").getTime());try{const today=await getBookingSlots(new NextRequest("http://localhost:3000/api/booking?service_id=oil_change&date=2026-11-05")),tomorrow=await getBookingSlots(new NextRequest("http://localhost:3000/api/booking?service_id=oil_change&date=2026-11-06"));expect((await today.json()).slots).toHaveLength(0);const slots=(await tomorrow.json()).slots;expect(slots.length).toBeGreaterThan(0);expect(slots.every((s:{start:string})=>localDate(new Date(s.start))==="2026-11-06")).toBe(true);await expect(createBooking({service_id:"oil_change",slot:"2026-11-05T16:00:00.000Z",client_name:"Client",client_phone:"+79990001123"})).rejects.toThrow("outside the booking window");}finally{clock.mockRestore();}});
+});

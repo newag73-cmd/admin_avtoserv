@@ -1,0 +1,8 @@
+node_modules
+.npm-cache
+.next
+.git
+.env
+data/admin-password.hash
+coverage
+*.db

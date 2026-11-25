@@ -1,0 +1,8 @@
+import { NextRequest } from "next/server";
+import { cookies } from "next/headers";
+import { isAdmin } from "@/lib/auth";
+import { getBusinessConfig, getSystemPrompt, saveBusinessConfig, saveSystemPrompt, getDefaultSystemPrompt, restoreBusinessBackup, restoreDefaultPrompt } from "@/lib/config";
+import { sameOriginMutation } from "@/lib/csrf";
+async function guard() { return isAdmin((await cookies()).get("admin_session")?.value); }
+export async function GET() { if (!await guard()) return Response.json({ error: "Unauthorized" }, { status: 401 }); return Response.json({ business: await getBusinessConfig(), prompt: await getSystemPrompt(), defaultPrompt: await getDefaultSystemPrompt() }); }
+export async function PUT(req: NextRequest) { if(!sameOriginMutation(req))return Response.json({error:"Cross-origin request denied"},{status:403});if (!await guard()) return Response.json({ error: "Unauthorized" }, { status: 401 }); const b = await req.json(); try { if(b.restoreBusiness===true)return Response.json({business:await restoreBusinessBackup()});if(b.restorePrompt===true){await restoreDefaultPrompt();return Response.json({prompt:await getSystemPrompt()});}if (b.business) await saveBusinessConfig(b.business); if (typeof b.prompt === "string") await saveSystemPrompt(b.prompt); return Response.json({ ok: true }); } catch (e) { const issues=e instanceof Error&&"issues" in e?(e as Error&{issues:{path:(string|number)[];message:string}[]}).issues.map(x=>({path:x.path.join("."),message:x.message})):[];return Response.json({ error: e instanceof Error ? e.message : "Invalid config",issues }, { status: 400 }); } }

@@ -1,0 +1,17 @@
+node_modules
+.npm-cache
+.next
+coverage
+.env
+.env.*
+!.env.example
+data/*.bak
+data/admin-password.hash
+prisma/*.db
+*.log
+*.db
+.next
+.npm-cache
+node_modules
+coverage
+tsconfig.tsbuildinfo

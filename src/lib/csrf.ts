@@ -1,0 +1,2 @@
+import type {NextRequest} from "next/server";
+export function sameOriginMutation(req:NextRequest){const origin=req.headers.get("origin");if(origin){try{const url=new URL(origin),host=(req.headers.get("x-forwarded-host")??req.headers.get("host")??"").split(",")[0].trim(),proto=(req.headers.get("x-forwarded-proto")??req.nextUrl.protocol.replace(":","")).split(",")[0].trim();return url.host===host&&url.protocol===`${proto}:`;}catch{return false;}}return req.headers.get("sec-fetch-site")==="same-origin";}

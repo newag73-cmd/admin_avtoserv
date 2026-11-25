@@ -1,0 +1,202 @@
+{
+  "schema_version": 1,
+  "niche": "auto_service",
+  "ui": {
+    "locale": "ru-RU",
+    "currency": "RUB"
+  },
+  "timezone": "Europe/Moscow",
+  "business": {
+    "name": "Автосервис «Пример»",
+    "phone": "+7 000 000-00-00",
+    "whatsapp": "+7 000 000-00-00",
+    "telegram": "@example_service",
+    "email": "info@example.example",
+    "address": "г. Пример, ул. Примерная, 1",
+    "legal_note": "Укажите реальные реквизиты при запуске",
+    "map_url": "",
+    "parking_note": ""
+  },
+  "hours": {
+    "mon": {
+      "open": "09:00",
+      "close": "20:00"
+    },
+    "tue": {
+      "open": "09:00",
+      "close": "20:00"
+    },
+    "wed": {
+      "open": "09:00",
+      "close": "20:00"
+    },
+    "thu": {
+      "open": "09:00",
+      "close": "20:00"
+    },
+    "fri": {
+      "open": "09:00",
+      "close": "20:00"
+    },
+    "sat": {
+      "open": "10:00",
+      "close": "18:00"
+    },
+    "sun": "closed"
+  },
+  "payment": [
+    "Наличные",
+    "Карта",
+    "СБП"
+  ],
+  "services": [
+    {
+      "id": "oil_change",
+      "name": "Замена масла ДВС с фильтром",
+      "aliases": [
+        "поменять масло",
+        "замена масла"
+      ],
+      "duration_min": 40,
+      "price": 1500,
+      "price_note": "без стоимости масла",
+      "description": "Сливаю старое масло, ставлю новый фильтр, довожу уровень.",
+      "parallel_capacity": 2,
+      "active": true
+    },
+    {
+      "id": "diagnostics",
+      "name": "Компьютерная диагностика",
+      "aliases": [
+        "диагностика авто",
+        "компьютерная проверка"
+      ],
+      "duration_min": 45,
+      "price": 1200,
+      "price_note": "стоимость вычитается при ремонте у нас",
+      "description": "Считывание ошибок, проверка по основным системам.",
+      "parallel_capacity": 2,
+      "active": true
+    },
+    {
+      "id": "brake_pads_front",
+      "name": "Замена передних тормозных колодок",
+      "aliases": [
+        "поменять колодки",
+        "тормозные колодки"
+      ],
+      "duration_min": 60,
+      "price": 2200,
+      "price_note": "без стоимости запчастей",
+      "description": "",
+      "parallel_capacity": 1,
+      "active": true
+    },
+    {
+      "id": "wheel_balance",
+      "name": "Балансировка 4 колёс",
+      "aliases": [
+        "развал-схождение",
+        "балансировка колес"
+      ],
+      "duration_min": 50,
+      "price": 2000,
+      "price_note": null,
+      "description": "",
+      "parallel_capacity": 1,
+      "active": true
+    },
+    {
+      "id": "ac_service",
+      "name": "Заправка кондиционера",
+      "aliases": [
+        "кондей",
+        "заправить кондиционер"
+      ],
+      "duration_min": 60,
+      "price": 3500,
+      "price_note": "зависит от объёма системы",
+      "description": "",
+      "parallel_capacity": 1,
+      "active": true
+    },
+    {
+      "id": "body_work",
+      "name": "Кузовной ремонт",
+      "aliases": [],
+      "duration_min": null,
+      "price": null,
+      "price_note": "по оценке после осмотра",
+      "description": "Оценка бесплатная, но запись обязательна.",
+      "parallel_capacity": 1,
+      "active": true,
+      "requires_human_quote": true
+    },
+    {
+      "id": "engine_rebuild",
+      "name": "Капремонт двигателя",
+      "aliases": [],
+      "duration_min": null,
+      "price": null,
+      "price_note": "не оказываем",
+      "description": "",
+      "parallel_capacity": 0,
+      "active": false
+    }
+  ],
+  "booking": {
+    "min_lead_time_min": 60,
+    "max_horizon_days": 30,
+    "slot_step_min": 30,
+    "reminder_hours_before": 24,
+    "ask_comment": true
+  },
+  "blocked_slots": [
+    {
+      "date": null,
+      "weekday": "*",
+      "start": "13:00",
+      "end": "14:00",
+      "reason": "обед"
+    }
+  ],
+  "notifications": {
+    "client_email": true,
+    "admin_email": "",
+    "admin_telegram": false
+  },
+  "assistant_settings": {
+    "model": "gpt-4o-mini",
+    "temperature": 0.2,
+    "max_tokens": 600,
+    "widget_enabled": true,
+    "escalation_only": false,
+    "context_messages": 20
+  },
+  "escalation": {
+    "fallback_message": "Точного ответа у меня нет — этой информации у меня нет. Чтобы не подвести вас, уточните, пожалуйста, у администратора: {phone}, {whatsapp}, {email}.",
+    "always_human": [
+      "скидка",
+      "гарантийный случай",
+      "претензия",
+      "юридическое лицо",
+      "оплата по счёту",
+      "отказ в ремонте"
+    ]
+  },
+  "widget": {
+    "title": "Администратор автосервиса",
+    "button_label": "Задать вопрос",
+    "avatar_url": "",
+    "accent_color": "#7845BD",
+    "position": "bottom-right",
+    "greeting": "Здравствуйте! Я администратор автосервиса. Подскажу по услугам, ценам и запишу на удобное время.",
+    "quick_replies": [
+      "Что у вас можно сделать?",
+      "Сколько стоит замена масла?",
+      "Записаться на диагностику",
+      "Как до вас доехать?"
+    ]
+  }
+}
+

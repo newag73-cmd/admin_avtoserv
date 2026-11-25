@@ -1,0 +1,4 @@
+import { cookies } from "next/headers";
+import { isAdmin } from "@/lib/auth";
+import { db } from "@/lib/db";
+export async function GET() { if (!await isAdmin((await cookies()).get("admin_session")?.value)) return Response.json({ error: "Unauthorized" }, { status: 401 }); const rows = await db.booking.findMany({ orderBy: { slotStart: "asc" } }); const esc = (x: unknown) => {let value=String(x??"").replaceAll('"','""');if(/^[=+@-]/.test(value))value=`'${value}`;return `"${value}"`;}; const csv = ["id,service_id,slot_start,slot_end,client_name,client_phone,status", ...rows.map(b => [b.id,b.serviceId,b.slotStart.toISOString(),b.slotEnd.toISOString(),b.clientName,b.clientPhone,b.status].map(esc).join(","))].join("\r\n"); return new Response(`\uFEFF${csv}`, { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": "attachment; filename=bookings.csv" } }); }
