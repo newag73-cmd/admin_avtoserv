@@ -1,0 +1,66 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../src/generated/layero"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AppSetting {
+  key       String   @id
+  value     String   @db.Text
+  backup    String?  @db.Text
+  updatedAt DateTime @updatedAt
+}
+
+model Booking {
+  id             String   @id @default(cuid())
+  serviceId      String
+  slotStart      DateTime
+  slotEnd        DateTime
+  clientName     String
+  clientPhone    String
+  clientEmail    String?
+  comment        String?
+  status         String   @default("pending")
+  source         String   @default("widget")
+  sessionId      String?
+  reminderSentAt DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  @@unique([serviceId, slotStart])
+  @@index([status, slotStart])
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  sessionId String    @unique
+  startedAt DateTime  @default(now())
+  lastAt    DateTime  @updatedAt
+  escalated Boolean   @default(false)
+  flagged   Boolean   @default(false)
+  messages  Message[]
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  role           String
+  content        String       @db.Text
+  toolName       String?
+  refusal        Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  Conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  @@index([conversationId, createdAt])
+}
+
+model Lead {
+  id        String   @id @default(cuid())
+  reason    String
+  summary   String   @db.Text
+  contact   String?
+  status    String   @default("new")
+  createdAt DateTime @default(now())
+}

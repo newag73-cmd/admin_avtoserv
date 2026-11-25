@@ -11,6 +11,8 @@ prisma/*.db
 *.log
 *.db
 .next
+.next-verification
+src/generated/
 .npm-cache
 node_modules
 coverage

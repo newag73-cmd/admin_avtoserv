@@ -1,6 +1,7 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
+import { db, databaseConfigured } from "@/lib/db";
 
 const time = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 const day = z.union([z.literal("closed"), z.object({ open: time, close: time })]);
@@ -23,16 +24,55 @@ export const businessSchema = z.object({
 });
 export type BusinessConfig = z.infer<typeof businessSchema>;
 const dataPath = (file: string) => process.env.DATA_DIR ? path.join(process.env.DATA_DIR, file) : path.join(process.cwd(), "data", file);
-export async function getBusinessConfig(): Promise<BusinessConfig> { return businessSchema.parse(JSON.parse(await readFile(dataPath("business.json"), "utf8"))); }
-export async function getSystemPrompt(): Promise<string> { return readFile(dataPath("system-prompt.txt"), "utf8"); }
+const settingKeys = { business: "business-config", prompt: "system-prompt" } as const;
+async function readStoredSetting(key: string, file: string): Promise<string | null> {
+  if (!databaseConfigured) return null;
+  try {
+    const existing = await db.appSetting.findUnique({ where: { key } });
+    if (existing) return existing.value;
+    const value = await readFile(dataPath(file), "utf8");
+    return (await db.appSetting.upsert({ where: { key }, create: { key, value }, update: {} })).value;
+  } catch (error) {
+    console.error("persistent_business_setting_read_failed", key, error instanceof Error ? error.name : "unknown");
+    return null;
+  }
+}
+async function writeStoredSetting(key: string, value: string, file: string): Promise<void> {
+  if (databaseConfigured) {
+    const previous = await db.appSetting.findUnique({ where: { key } });
+    await db.appSetting.upsert({ where: { key }, create: { key, value }, update: { value, backup: previous?.value ?? null } });
+    return;
+  }
+  if (process.env.NODE_ENV === "production") throw new Error("Подключите PostgreSQL в настройках хостинга, чтобы изменения сохранялись после перезапуска.");
+  const target = dataPath(file), old = await readFile(target, "utf8").catch(() => null);
+  if (old) await writeFile(`${target}.bak`, old, "utf8");
+  const temp = `${target}.${Date.now()}.tmp`;
+  await writeFile(temp, value, "utf8");
+  await rename(temp, target);
+}
+export async function getBusinessConfig(): Promise<BusinessConfig> {
+  const raw = await readStoredSetting(settingKeys.business, "business.json") ?? await readFile(dataPath("business.json"), "utf8");
+  return businessSchema.parse(JSON.parse(raw));
+}
+export async function getSystemPrompt(): Promise<string> {
+  return await readStoredSetting(settingKeys.prompt, "system-prompt.txt") ?? await readFile(dataPath("system-prompt.txt"), "utf8");
+}
 export async function getDefaultSystemPrompt(): Promise<string> { return readFile(dataPath("system-prompt.default.txt"), "utf8"); }
 export async function saveBusinessConfig(input: unknown): Promise<BusinessConfig> {
-  const parsed = businessSchema.parse(input), file = dataPath("business.json"), temp = `${file}.${Date.now()}.tmp`;
-  const old = await readFile(file, "utf8").catch(() => null);
-  if (old) await writeFile(`${file}.bak`, old, "utf8");
-  await writeFile(temp, `${JSON.stringify(parsed, null, 2)}\n`, "utf8"); await rename(temp, file); return parsed;
+  const parsed = businessSchema.parse(input);
+  await writeStoredSetting(settingKeys.business, `${JSON.stringify(parsed, null, 2)}\n`, "business.json");
+  return parsed;
 }
-export async function saveSystemPrompt(value: string): Promise<void> { if (value.length > 30000) throw new Error("Промпт превышает 30000 символов"); const p = dataPath("system-prompt.txt"), old = await readFile(p, "utf8"); await writeFile(`${p}.bak`, old); const tmp = `${p}.tmp`; await writeFile(tmp, value); await rename(tmp, p); }
-export async function restoreBusinessBackup():Promise<BusinessConfig>{const raw=await readFile(`${dataPath("business.json")}.bak`,"utf8"),parsed=businessSchema.parse(JSON.parse(raw));return saveBusinessConfig(parsed);}
+export async function saveSystemPrompt(value: string): Promise<void> { if (value.length > 30000) throw new Error("Промпт превышает 30000 символов"); await writeStoredSetting(settingKeys.prompt, value, "system-prompt.txt"); }
+export async function restoreBusinessBackup():Promise<BusinessConfig>{
+  if (databaseConfigured) {
+    const row = await db.appSetting.findUnique({ where: { key: settingKeys.business } });
+    if (!row?.backup) throw new Error("Резервная копия конфигурации не найдена");
+    const parsed = businessSchema.parse(JSON.parse(row.backup));
+    await writeStoredSetting(settingKeys.business, `${JSON.stringify(parsed, null, 2)}\n`, "business.json");
+    return parsed;
+  }
+  const raw=await readFile(`${dataPath("business.json")}.bak`,"utf8"),parsed=businessSchema.parse(JSON.parse(raw));return saveBusinessConfig(parsed);
+}
 export async function restoreDefaultPrompt():Promise<void>{await saveSystemPrompt(await getDefaultSystemPrompt());}
 export function fallbackMessage(c: BusinessConfig): string { return c.escalation.fallback_message.replaceAll("{phone}", c.business.phone ?? "").replaceAll("{whatsapp}", c.business.whatsapp ?? "").replaceAll("{email}", c.business.email ?? ""); }

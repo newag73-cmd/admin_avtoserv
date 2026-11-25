@@ -1,11 +1,13 @@
 services:
   app:
     build: .
-    ports: ["3000:3000"]
+    ports:
+      - "3000:3000"
     env_file: .env
     environment:
-      DATABASE_URL: file:/data/business.db
+      DATABASE_URL: "file:/data/business.db"
       DATA_DIR: /data
+      PORT: "3000"
     volumes:
       - business-data:/data
     restart: unless-stopped
