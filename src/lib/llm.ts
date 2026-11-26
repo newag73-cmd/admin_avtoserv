@@ -67,7 +67,12 @@ export async function completeWithTools(messages: LlmMessage[], tools: ToolDefin
       return {content,toolCalls:[...calls.values()]};
     }catch(error){
       const status=error instanceof OpenAI.APIError?error.status:undefined;
-      if(status===401||status===403)throw new Error(`PROVIDER_ACCESS_${status}`);
+      if(status===401||status===403){
+        const code=error instanceof OpenAI.APIError&&typeof error.code==="string"
+          ? error.code.replace(/[^a-zA-Z0-9_]/g,"").slice(0,64)
+          : "unknown";
+        throw new Error(`PROVIDER_ACCESS_${status}_${code||"unknown"}`);
+      }
       const retryable=!status||status===429||status>=500;
       if(!retryable)throw new Error(`PROVIDER_HTTP_${status}`);
       if(attempt===0){await new Promise(resolve=>setTimeout(resolve,1000));continue;}
